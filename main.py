@@ -189,7 +189,7 @@ def _test():
 
     #Задаем количество суток для прогноза
     dt_end = dt_start + timedelta(
-        days=16,
+        days=2,
 #        seconds=5689,
         seconds=0,
         microseconds=0,
