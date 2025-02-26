@@ -155,20 +155,28 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
 
 
 #            seconds = (data_off - data_on).total_seconds()
-            chislo = (data_off - data_on).total_seconds()//5689
+            # Расчет витка на котором проходят вычисления
+            vitok = (data_off - data_on).total_seconds()//5689
             
-            print(chislo)
-#            chislo += 1
-#            if vitok != chislo:
-#                if vitok != 0 and not vitok in flag.keys():
-#                    print(vitok)
+#            print(vitok)
+            chislo += 1
+            if vitok != chislo:
+                if vitok != 0 and not vitok in flag.keys():
+                    print(vitok)
 #                    vremya_kontakta = date_n2 - date_n1
 #                    dlitelnost = vitok, date_n1, date_n2 , vremya_kontakta
 #                    t_semki.append(dlitelnost)
-#                    
-#                vitok = chislo
+#                print(vitok)
+                vitok = chislo
 #                date_n1 = dt
 #                date_n2 = 0
+ #           else:
+  #              if date_n2 == 0 or dt == date_n2 + timedelta(seconds=1):
+  #                  date_n2 = dt
+   #             else:
+    #                date_n2 = dt
+     #               flag [vitok] = True
+
             # Создаём в шейп-файле новый объект
             # Определеяем геометрию
             track_shape.point(lon_s, lat_s)
