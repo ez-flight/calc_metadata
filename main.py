@@ -49,23 +49,27 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     #Шаг при вхождении в зону наблюдения за объектом
     delta_obn = timedelta(
         days=0,
-        seconds=0,
-        microseconds=0,
-        milliseconds=250,
-        minutes=0,
-        hours=0,
-        weeks=0
-    )
-    # Время включения
-    data_on = timedelta(
-        days=0,
-        seconds=0,
+        seconds=5,
         microseconds=0,
         milliseconds=0,
         minutes=0,
         hours=0,
         weeks=0
     )
+    
+    #Включения
+    N_vkl=1
+    t_semki = []
+    dlitelnost = []
+    # Для поиска длины трассы
+    delta_data =[]
+    chislo = 0
+    
+    vitok = 0
+    flag = {}
+
+    # Время включения
+    data_on = dt_start
 
     # Время выключения
     data_off = timedelta(
@@ -95,6 +99,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     i = 0
     # Цикл расчета в заданном интервале времени
     while dt_start < dt_end:
+#        data_on = dt_start
         # Считаем положение спутника в инерциальной СК
         X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s = get_position(tle_1, tle_2, dt_start)
         Rs = X_s, Y_s, Z_s
@@ -123,10 +128,9 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         ay_grad = math.degrees(ay)
 
         if  y_grad > 24 and y_grad < 55 and R_0 < R_e:
-            if data_on == data_off:
-                data_on = dt_start
-            else:
-                data_off= dt_start
+
+            data_off= dt_start
+                
             #Расчет угловой скорости вращения земли для подспутниковой точки
             Wp = 1674 * math.cos(math.radians(lat_s))
             Wp_m.append(Wp)
@@ -147,7 +151,24 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
             Fd_m.append(Fd)
  #           print (f"Частота доплера - {Fd:.0f}, скорость {Wp}")
  #       print (f"{Fd}")
-  #          print (R_0)
+#            print (data_on)
+
+
+#            seconds = (data_off - data_on).total_seconds()
+            chislo = (data_off - data_on).total_seconds()//5689
+            
+            print(chislo)
+#            chislo += 1
+#            if vitok != chislo:
+#                if vitok != 0 and not vitok in flag.keys():
+#                    print(vitok)
+#                    vremya_kontakta = date_n2 - date_n1
+#                    dlitelnost = vitok, date_n1, date_n2 , vremya_kontakta
+#                    t_semki.append(dlitelnost)
+#                    
+#                vitok = chislo
+#                date_n1 = dt
+#                date_n2 = 0
             # Создаём в шейп-файле новый объект
             # Определеяем геометрию
             track_shape.point(lon_s, lat_s)
@@ -163,7 +184,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         i += 1
 
  #   print (i)
-    print (data_on)
+    print(data_on)
     print(data_off)
     return track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m, Wp_m
    
