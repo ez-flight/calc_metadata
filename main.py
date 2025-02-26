@@ -34,7 +34,7 @@ def get_position(tle_1, tle_2, utc_time):
     Vx_s, Vy_s, Vz_s = V_s
     return X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s
 
-
+# Функция Расчета Углов и записи в шейп файл
 def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape,pos_gt, Fd):
  
     # Угловая скорость вращения земли
@@ -45,8 +45,38 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     Lam=0.000096
     # Координаты объекта в геодезической СК
     lat_t, lon_t, alt_t = pos_gt
-    # Время начала расчетов
-    dt = dt_start
+
+    #Шаг при вхождении в зону наблюдения за объектом
+    delta_obn = timedelta(
+        days=0,
+        seconds=0,
+        microseconds=0,
+        milliseconds=250,
+        minutes=0,
+        hours=0,
+        weeks=0
+    )
+    # Время включения
+    data_on = timedelta(
+        days=0,
+        seconds=0,
+        microseconds=0,
+        milliseconds=0,
+        minutes=0,
+        hours=0,
+        weeks=0
+    )
+
+    # Время выключения
+    data_off = timedelta(
+        days=0,
+        seconds=0,
+        microseconds=0,
+        milliseconds=0,
+        minutes=0,
+        hours=0,
+        weeks=0
+    )
 
     i_m = []
     dt_m = []
@@ -64,17 +94,17 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     # Объявляем счётчики, i для идентификаторов, minutes для времени
     i = 0
     # Цикл расчета в заданном интервале времени
-    while dt < dt_end:
+    while dt_start < dt_end:
         # Считаем положение спутника в инерциальной СК
-        X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s = get_position(tle_1, tle_2, dt)
+        X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s = get_position(tle_1, tle_2, dt_start)
         Rs = X_s, Y_s, Z_s
         Vs = Vx_s, Vy_s, Vz_s
 
         # Считаем положение спутника в геодезической СК
-        lon_s, lat_s, alt_s = get_lat_lon_sgp(tle_1, tle_2, dt)
+        lon_s, lat_s, alt_s = get_lat_lon_sgp(tle_1, tle_2, dt_start)
 
         #Персчитываем положение объекта из геодезической в инерциальную СК  на текущее время с расчетом компонентов скорости точки на земле
-        pos_it, v_t = get_xyzv_from_latlon(dt, lon_t, lat_t, alt_t)
+        pos_it, v_t = get_xyzv_from_latlon(dt_start, lon_t, lat_t, alt_t)
         X_t, Y_t, Z_t = pos_it
 
         #Расчет ----
@@ -82,7 +112,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         R_0 = math.sqrt(((X_s-X_t)**2)+((Y_s-Y_t)**2)+((Z_s-Z_t)**2))
         R_e = math.sqrt((X_t**2)+(Y_t**2)+(Z_t**2))
         V_s = math.sqrt((Vx_s**2)+(Vy_s**2)+(Vz_s**2))
-        print(R_0)
+ #       print(R_0)
 
         #Расчет двух углов
         #Верхний (Угол Визирования)
@@ -93,6 +123,10 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         ay_grad = math.degrees(ay)
 
         if  y_grad > 24 and y_grad < 55 and R_0 < R_e:
+            if data_on == data_off:
+                data_on = dt_start
+            else:
+                data_off= dt_start
             #Расчет угловой скорости вращения земли для подспутниковой точки
             Wp = 1674 * math.cos(math.radians(lat_s))
             Wp_m.append(Wp)
@@ -101,7 +135,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
             a = calc_lamda (Fd, Lam, ay, Rs, Vs, R_0, R_e, R_s, V_s)
 
             i_m.append(i)
-            dt_m.append(dt)
+            dt_m.append(dt_start)
             lon_s_m.append(lon_s)
             lat_s_m.append(lat_s)
             R_s_m.append(R_s)
@@ -118,13 +152,19 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
             # Определеяем геометрию
             track_shape.point(lon_s, lat_s)
             # и атрибуты
-            track_shape.record(i, dt, lon_s, lat_s, R_s, R_e, R_0, y_grad, ay_grad, a, Fd)
-            # Не забываем про счётчики
+            track_shape.record(i, dt_start, lon_s, lat_s, R_s, R_e, R_0, y_grad, ay_grad, a, Fd)
+
  #       print(ugol)
+            dt_start += delta_obn
+        else:
+            dt_start += delta
+           
+        # Не забываем про счётчики
         i += 1
-        dt += delta
 
  #   print (i)
+    print (data_on)
+    print(data_off)
     return track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m, Wp_m
    
 
