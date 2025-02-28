@@ -60,29 +60,22 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     dt = dt_start
 
     #Включения
-    N_vkl=1
+    N_vkl = 1
     t_semki = []
     dlitelnost = []
     # Для поиска длины трассы
     delta_data =[]
-    chislo = 0
+    # Переменная для сохранения обнаруженного вхождения в витке
+    vitok_memory = 0
     
     vitok = 0
     flag = {}
 
     # Время включения
-    data_on = dt_start
-
+ #   data_on = dt_start
+    data_on  = []
     # Время выключения
-    data_off = timedelta(
-        days=0,
-        seconds=0,
-        microseconds=0,
-        milliseconds=0,
-        minutes=0,
-        hours=0,
-        weeks=0
-    )
+    data_off = []
 
     i_m = []
     dt_m = []
@@ -119,7 +112,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         R_0 = math.sqrt(((X_s-X_t)**2)+((Y_s-Y_t)**2)+((Z_s-Z_t)**2))
         R_e = math.sqrt((X_t**2)+(Y_t**2)+(Z_t**2))
         V_s = math.sqrt((Vx_s**2)+(Vy_s**2)+(Vz_s**2))
- #       print(R_0)
+        print(R_0)
 
         #Расчет двух углов
         #Верхний (Угол Визирования)
@@ -131,7 +124,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
 
         if  y_grad > 24 and y_grad < 55 and R_0 < R_e:
 
-            data_off= dt_start
+#           data_off= dt_start
                 
             #Расчет угловой скорости вращения земли для подспутниковой точки
             Wp = 1674 * math.cos(math.radians(lat_s))
@@ -154,22 +147,21 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
  #           print (f"Частота доплера - {Fd:.0f}, скорость {Wp}")
  #       print (f"{Fd}")
 #            print (data_on)
-
-
-#            seconds = (data_off - data_on).total_seconds()
             # Расчет витка на котором проходят вычисления
-            vitok = (data_off - data_on).total_seconds()//5689
-            
-#            print(vitok)
-            chislo += 1
-            if vitok != chislo:
-                if vitok != 0 and not vitok in flag.keys():
-                    print(vitok)
+            print (dt)
+            vitok = (dt - dt_start).total_seconds()//5689
+#            vitok += 1
+ #           print(vitok)
+#            vitok_memory += 1
+#            if vitok != vitok_memory:
+                #Проверка первого однаружения в витке
+ #               if vitok != 0 and not vitok in flag.keys():
+#                    print(vitok)
 #                    vremya_kontakta = data_off - data_on
 #                    dlitelnost = vitok, data_on, data_off , vremya_kontakta
 #                    t_semki.append(dlitelnost)
 #                print(vitok)
-                vitok = chislo
+#                vitok = vitok_memory
 #                data_on = dt
 #                data_off = 0
  #           else:
