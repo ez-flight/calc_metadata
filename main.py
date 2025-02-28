@@ -112,7 +112,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         R_0 = math.sqrt(((X_s-X_t)**2)+((Y_s-Y_t)**2)+((Z_s-Z_t)**2))
         R_e = math.sqrt((X_t**2)+(Y_t**2)+(Z_t**2))
         V_s = math.sqrt((Vx_s**2)+(Vy_s**2)+(Vz_s**2))
-        print(R_0)
+ #       print(R_0)
 
         #Расчет двух углов
         #Верхний (Угол Визирования)
@@ -148,7 +148,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
  #       print (f"{Fd}")
 #            print (data_on)
             # Расчет витка на котором проходят вычисления
-            print (dt)
+ #           print (dt)
             vitok = (dt - dt_start).total_seconds()//5689
 #            vitok += 1
  #           print(vitok)
@@ -185,7 +185,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         # Не забываем про счётчики
         i += 1
 
- #   print (i)
+    print (i)
     print(data_on)
     print(data_off)
     return track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m, Wp_m
