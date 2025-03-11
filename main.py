@@ -209,7 +209,7 @@ def _test():
     pos_gt_1 = lat_t, lon_t, alt_t
     pos_gt_2 = (55.75583, 37.6173, 140)
 #    print (pos_gt_1)
- #   print (pos_gt_2)    
+ #   print (pos_gt_2)
      
     Fd = 0
 
@@ -236,7 +236,7 @@ def _test():
     track_shape.field("λ", "F", 40, 5)
     track_shape.field("f", "F", 40, 5)
 
-     
+  
     #Задаем начальное время
     dt_start = datetime(2024, 2, 21, 3, 0, 0)
     #Задаем шаг по времени для прогноза
@@ -264,7 +264,7 @@ def _test():
     
     track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m_1, Wp_m_1,  = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape, pos_gt_1, Fd)
 
-    sheet1 = book.add_sheet(str(Fd))   
+    sheet1 = book.add_sheet(str(Fd))
     for num in range(len(Fd_m_1)):
 
         row = sheet1.row(num)
@@ -280,8 +280,6 @@ def _test():
         row.write(9, a_m[num])
         row.write(10, Fd_m_1[num])
         row.write(11, Wp_m_1[num])
-        
-    
 
     book.save(filename + "_Fd" + ".xls")
   #  plt.title('Доплеровское смещение частоты отраженного сигнала в зависимости от угла скоса и угловой скорости подспутниковой точки')
