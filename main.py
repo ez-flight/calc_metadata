@@ -36,7 +36,7 @@ def get_position(tle_1, tle_2, utc_time):
 
 # Функция Расчета Углов и записи в шейп файл
 def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape,pos_gt, Fd):
- 
+
     # Угловая скорость вращения земли
     We = 7.2292115E-5
     # Радиус земли
@@ -94,25 +94,26 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     i = 0
     # Цикл расчета в заданном интервале времени
     while dt < dt_end:
-#        data_on = dt_start
+
         # Считаем положение спутника в инерциальной СК
-        X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s = get_position(tle_1, tle_2, dt_start)
+        X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s = get_position(tle_1, tle_2, dt)
         Rs = X_s, Y_s, Z_s
         Vs = Vx_s, Vy_s, Vz_s
 
         # Считаем положение спутника в геодезической СК
-        lon_s, lat_s, alt_s = get_lat_lon_sgp(tle_1, tle_2, dt_start)
+        lon_s, lat_s, alt_s = get_lat_lon_sgp(tle_1, tle_2, dt)
 
         #Персчитываем положение объекта из геодезической в инерциальную СК  на текущее время с расчетом компонентов скорости точки на земле
-        pos_it, v_t = get_xyzv_from_latlon(dt_start, lon_t, lat_t, alt_t)
+        pos_it, v_t = get_xyzv_from_latlon(dt, lon_t, lat_t, alt_t)
         X_t, Y_t, Z_t = pos_it
-
+ 
         #Расчет ----
         R_s = math.sqrt((X_s**2)+(Y_s**2)+(Z_s**2))
         R_0 = math.sqrt(((X_s-X_t)**2)+((Y_s-Y_t)**2)+((Z_s-Z_t)**2))
         R_e = math.sqrt((X_t**2)+(Y_t**2)+(Z_t**2))
         V_s = math.sqrt((Vx_s**2)+(Vy_s**2)+(Vz_s**2))
- #       print(R_0)
+
+
 
         #Расчет двух углов
         #Верхний (Угол Визирования)
@@ -123,9 +124,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         ay_grad = math.degrees(ay)
 
         if  y_grad > 24 and y_grad < 55 and R_0 < R_e:
-
-#           data_off= dt_start
-                
+  
             #Расчет угловой скорости вращения земли для подспутниковой точки
             Wp = 1674 * math.cos(math.radians(lat_s))
             Wp_m.append(Wp)
@@ -149,7 +148,10 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
 #            print (data_on)
             # Расчет витка на котором проходят вычисления
  #           print (dt)
-            vitok = (dt - dt_start).total_seconds()//5689
+            vitok = (dt - dt_start).total_seconds()//5689       
+            print (vitok)
+ ##               data_on= dt
+ #               print(data_on)
 #            vitok += 1
  #           print(vitok)
 #            vitok_memory += 1
@@ -186,7 +188,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         i += 1
 
     print (i)
-    print(data_on)
+
     print(data_off)
     return track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m, Wp_m
    
