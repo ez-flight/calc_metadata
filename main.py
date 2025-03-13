@@ -147,17 +147,26 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
  #       print (f"{Fd}")
 #            print (data_on)
             # Расчет витка на котором проходят вычисления
- #           print (dt)
-            vitok = (dt - dt_start).total_seconds()//5689       
-            print (vitok)
- ##               data_on= dt
- #               print(data_on)
-#            vitok += 1
- #           print(vitok)
-#            vitok_memory += 1
-#            if vitok != vitok_memory:
+            vitok = (dt - dt_start).total_seconds()//5689
+            vitok += 1
+#            print(vitok)
+ #           vitok_memory += 1
+            #Проверка первого однаружения в витке
+            if vitok != vitok_memory:
+                if vitok_memory != 0 and not vitok in flag.keys():
+                    print(vitok_memory)
+                    vremya_kontakta = data_off - data_on
+                    dlitelnost = vitok_memory, data_on, data_off , vremya_kontakta
+                    t_semki.append(dlitelnost)
+                vitok_memory = vitok
+                data_on = dt
+
+            else:
+                data_off = dt
+                flag [vitok] = True
+ #           print (delta_data)
                 #Проверка первого однаружения в витке
- #               if vitok != 0 and not vitok in flag.keys():
+#                if vitok != 0 and not vitok in flag.keys():
 #                    print(vitok)
 #                    vremya_kontakta = data_off - data_on
 #                    dlitelnost = vitok, data_on, data_off , vremya_kontakta
@@ -166,12 +175,12 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
 #                vitok = vitok_memory
 #                data_on = dt
 #                data_off = 0
- #           else:
-  #              if data_off == 0 or dt == data_off + timedelta(seconds=1):
-  #                  data_off = dt
-   #             else:
-    #                data_off = dt
-     #               flag [vitok] = True
+#            else:
+#                if data_off == 0 or dt == data_off + timedelta(seconds=1):
+#                    data_off = dt
+#                else:
+#                    data_off = dt
+#                    flag [vitok] = True
 
             # Создаём в шейп-файле новый объект
             # Определеяем геометрию
@@ -179,17 +188,18 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
             # и атрибуты
             track_shape.record(i, dt, lon_s, lat_s, R_s, R_e, R_0, y_grad, ay_grad, a, Fd)
 
- #       print(ugol)
             dt += delta_obn
         else:
             dt += delta
-           
         # Не забываем про счётчики
         i += 1
 
-    print (i)
+    #Расчет данных на последнем витке
+    vremya_kontakta = data_off - data_on
+    dlitelnost = vitok_memory, data_on, data_off , vremya_kontakta
+    t_semki.append(dlitelnost)
+    print (t_semki)
 
-    print(data_off)
     return track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m, Wp_m
    
 
