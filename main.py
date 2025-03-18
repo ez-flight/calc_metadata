@@ -144,18 +144,14 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
             a_m.append(a)
             Fd_m.append(Fd)
  #           print (f"Частота доплера - {Fd:.0f}, скорость {Wp}")
- #       print (f"{Fd}")
-#            print (data_on)
             # Расчет витка на котором проходят вычисления
             vitok = (dt - dt_start).total_seconds()//5689
             vitok += 1
-#            print(vitok)
- #           vitok_memory += 1
             #Проверка первого однаружения в витке
             if vitok != vitok_memory:
                 if vitok_memory != 0 and not vitok in flag.keys():
-                    print(vitok_memory)
                     vremya_kontakta = data_off - data_on
+                    #Запись в структуру данных о витке, начале обнаружения, конце, и длительности контакта
                     dlitelnost = vitok_memory, data_on, data_off , vremya_kontakta
                     t_semki.append(dlitelnost)
                 vitok_memory = vitok
@@ -164,23 +160,7 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
             else:
                 data_off = dt
                 flag [vitok] = True
- #           print (delta_data)
-                #Проверка первого однаружения в витке
-#                if vitok != 0 and not vitok in flag.keys():
-#                    print(vitok)
-#                    vremya_kontakta = data_off - data_on
-#                    dlitelnost = vitok, data_on, data_off , vremya_kontakta
-#                    t_semki.append(dlitelnost)
-#                print(vitok)
-#                vitok = vitok_memory
-#                data_on = dt
-#                data_off = 0
-#            else:
-#                if data_off == 0 or dt == data_off + timedelta(seconds=1):
-#                    data_off = dt
-#                else:
-#                    data_off = dt
-#                    flag [vitok] = True
+
 
             # Создаём в шейп-файле новый объект
             # Определеяем геометрию
@@ -208,7 +188,6 @@ def _test():
 
     book = xlwt.Workbook(encoding="utf-8")
 
-    #25544 37849
     # 56756 Кондор ФКА
     s_name, tle_1, tle_2 = read_tle_base_file(56756)
     #s_name, tle_1, tle_2 = read_tle_base_internet(37849)
@@ -220,16 +199,12 @@ def _test():
     alt_t = 12
     pos_gt_1 = lat_t, lon_t, alt_t
     pos_gt_2 = (55.75583, 37.6173, 140)
-#    print (pos_gt_1)
- #   print (pos_gt_2)
-     
+
+    # Частота доплера при которой производятся расчеты  
     Fd = 0
 
     filename = "result/" + s_name
-#    filename1 = "space1/" + str(a) + "_" + s_name
 
-
-    print (filename)
     # Создаём экземпляр класса Writer для создания шейп-файла, указываем тип геометрии
     track_shape = shapefile.Writer(filename, shapefile.POINT)
 
@@ -248,7 +223,6 @@ def _test():
     track_shape.field("λ", "F", 40, 5)
     track_shape.field("f", "F", 40, 5)
 
-  
     #Задаем начальное время
     dt_start = datetime(2024, 2, 21, 3, 0, 0)
     #Задаем шаг по времени для прогноза
@@ -273,7 +247,7 @@ def _test():
         hours=0,
         weeks=0
     )
-    
+
     track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m_1, Wp_m_1,  = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape, pos_gt_1, Fd)
 
     sheet1 = book.add_sheet(str(Fd))
