@@ -178,15 +178,14 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     vremya_kontakta = data_off - data_on
     dlitelnost = vitok_memory, data_on, data_off , vremya_kontakta
     t_semki.append(dlitelnost)
-    print (t_semki)
+ #   print (t_semki)
 
-    return track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m, Wp_m
-   
+    return t_semki   
 
 
 def _test():
 
-    book = xlwt.Workbook(encoding="utf-8")
+#    book = xlwt.Workbook(encoding="utf-8")
 
     # 56756 Кондор ФКА
     s_name, tle_1, tle_2 = read_tle_base_file(56756)
@@ -248,26 +247,28 @@ def _test():
         weeks=0
     )
 
-    track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m_1, Wp_m_1,  = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape, pos_gt_1, Fd)
+    t_semki  = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape, pos_gt_1, Fd)
+    for t_semki in t_semki:
+        vitok_memory, data_on, data_off , vremya_kontakta = t_semki
+        print(vitok_memory)
+ #   sheet1 = book.add_sheet(str(Fd))
+ #   for num in range(len(Fd_m_1)):
 
-    sheet1 = book.add_sheet(str(Fd))
-    for num in range(len(Fd_m_1)):
+#        row = sheet1.row(num)
+#        row.write(0, i_m[num])
+#        row.write(1, dt_m[num])
+#        row.write(2, lon_s_m[num])
+#        row.write(3, lat_s_m[num])
+#        row.write(4, R_s_m[num])
+#        row.write(5, R_e_m[num])
+#        row.write(6, R_0_m[num])
+#        row.write(7, y_grad_m[num])
+#        row.write(8, ay_grad_m[num])
+#        row.write(9, a_m[num])
+#        row.write(10, Fd_m_1[num])
+#        row.write(11, Wp_m_1[num])
 
-        row = sheet1.row(num)
-        row.write(0, i_m[num])
-        row.write(1, dt_m[num])
-        row.write(2, lon_s_m[num])
-        row.write(3, lat_s_m[num])
-        row.write(4, R_s_m[num])
-        row.write(5, R_e_m[num])
-        row.write(6, R_0_m[num])
-        row.write(7, y_grad_m[num])
-        row.write(8, ay_grad_m[num])
-        row.write(9, a_m[num])
-        row.write(10, Fd_m_1[num])
-        row.write(11, Wp_m_1[num])
-
-    book.save(filename + "_Fd" + ".xls")
+#    book.save(filename + "_Fd" + ".xls")
   #  plt.title('Доплеровское смещение частоты отраженного сигнала в зависимости от угла скоса и угловой скорости подспутниковой точки')
   #  plt.xlabel('скорость подспутниковой точки')
   #  plt.ylabel('Fd,Гц')
@@ -280,21 +281,21 @@ def _test():
     # можно заодно создать файл .prj с нужным описанием
            
        
-    try:
-        # Создаем файл .prj с тем же именем, что и выходной .shp
-        prj = open("%s.prj" % filename.replace(".shp", ""), "w")
-        # Создаем переменную с описанием EPSG:4326 (WGS84)
-        wgs84_wkt = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
-        # Записываем её в файл .prj
-        prj.write(wgs84_wkt)
-        # И закрываем его
-        prj.close()
-        # Функцией save также сохраняем и сам шейп.
-        track_shape.save(filename + ".shp")
-    except:
+#    try:
+#        # Создаем файл .prj с тем же именем, что и выходной .shp
+#        prj = open("%s.prj" % filename.replace(".shp", ""), "w")
+#        # Создаем переменную с описанием EPSG:4326 (WGS84)
+#        wgs84_wkt = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
+#        # Записываем её в файл .prj
+#        prj.write(wgs84_wkt)
+#        # И закрываем его
+#        prj.close()
+#        # Функцией save также сохраняем и сам шейп.
+#        track_shape.save(filename + ".shp")
+#    except:
         # Вдруг нет прав на запись или вроде того...
-        print("Unable to save shapefile")
-        return
+#        print("Unable to save shapefile")
+#        return
 
 if __name__ == "__main__":
     _test()
