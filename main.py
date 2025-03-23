@@ -67,6 +67,11 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
     delta_data =[]
     # Переменная для сохранения обнаруженного вхождения в витке
     vitok_memory = 0
+    # Переменные координат начала и конца трассы
+    pos_geo_s = []
+    pos_geo_s_on = []
+    pos_geo_s_off = []
+
     
     vitok = 0
     flag = {}
@@ -101,7 +106,9 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
         Vs = Vx_s, Vy_s, Vz_s
 
         # Считаем положение спутника в геодезической СК
-        lon_s, lat_s, alt_s = get_lat_lon_sgp(tle_1, tle_2, dt)
+        lon_s, lat_s, alt_s = get_lat_lon_sgp(tle_1, tle_2, dt) 
+        # Сохраняем положение спутника для фиксации начала и конца координат
+        pos_geo_s = lon_s, lat_s, alt_s
 
         #Персчитываем положение объекта из геодезической в инерциальную СК  на текущее время с расчетом компонентов скорости точки на земле
         pos_it, v_t = get_xyzv_from_latlon(dt, lon_t, lat_t, alt_t)
@@ -152,13 +159,15 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
                 if vitok_memory != 0 and not vitok in flag.keys():
                     vremya_kontakta = data_off - data_on
                     #Запись в структуру данных о витке, начале обнаружения, конце, и длительности контакта
-                    dlitelnost = vitok_memory, data_on, data_off , vremya_kontakta
+                    dlitelnost = vitok_memory, data_on , pos_geo_s_on, data_off ,pos_geo_s_off, vremya_kontakta
                     t_semki.append(dlitelnost)
                 vitok_memory = vitok
                 data_on = dt
+                pos_geo_s_on = pos_geo_s
 
             else:
                 data_off = dt
+                pos_geo_s_off = pos_geo_s
                 flag [vitok] = True
 
 
@@ -176,9 +185,9 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
 
     #Расчет данных на последнем витке
     vremya_kontakta = data_off - data_on
-    dlitelnost = vitok_memory, data_on, data_off , vremya_kontakta
+    dlitelnost = vitok_memory, data_on , pos_geo_s_on, data_off ,pos_geo_s_off, vremya_kontakta
     t_semki.append(dlitelnost)
- #   print (t_semki)
+    print (t_semki)
 
     return t_semki   
 
@@ -249,7 +258,7 @@ def _test():
 
     t_semki  = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape, pos_gt_1, Fd)
     for t_semki in t_semki:
-        vitok_memory, data_on, data_off , vremya_kontakta = t_semki
+        vitok_memory, data_on , pos_geo_s_on, data_off ,pos_geo_s_off, vremya_kontakta = t_semki
         print(vitok_memory)
  #   sheet1 = book.add_sheet(str(Fd))
  #   for num in range(len(Fd_m_1)):
