@@ -193,23 +193,22 @@ def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta
 
 
 def _test():
-
-#    book = xlwt.Workbook(encoding="utf-8")
-
     # 56756 Кондор ФКА
     s_name, tle_1, tle_2 = read_tle_base_file(56756)
     #s_name, tle_1, tle_2 = read_tle_base_internet(37849)
         
     # Координаты объекта в геодезической СК
-
     lat_t = 59.95  #55.75583
     lon_t = 30.316667 #37.6173
     alt_t = 12
     pos_gt_1 = lat_t, lon_t, alt_t
     pos_gt_2 = (55.75583, 37.6173, 140)
 
-    # Частота доплера при которой производятся расчеты  
-    Fd = 0
+    # Диапазон частот доплера с шагом 1000
+    Fd_start = -10000
+    Fd_end = 10000
+    Fd_step = 5000
+    Fd_values = range(Fd_start, Fd_end + Fd_step, Fd_step)
 
     filename = "result/" + s_name
 
@@ -217,8 +216,6 @@ def _test():
     track_shape = shapefile.Writer(filename, shapefile.POINT)
 
     # Добавляем поля - идентификатор, время, широту и долготу
-    # N - целочисленный тип, C - строка, F - вещественное число
-    # Для времени придётся использовать строку, т.к. нет поддержки формата "дата и время"
     track_shape.field("ID", "N", 40)
     track_shape.field("TIME", "C", 40)
     track_shape.field("LON", "F", 40)
@@ -231,9 +228,9 @@ def _test():
     track_shape.field("λ", "F", 40, 5)
     track_shape.field("f", "F", 40, 5)
 
-    #Задаем начальное время
+    # Задаем начальное время
     dt_start = datetime(2024, 2, 21, 3, 0, 0)
-    #Задаем шаг по времени для прогноза
+    # Задаем шаг по времени для прогноза
     delta = timedelta(
         days=0,
         seconds=10,
@@ -244,10 +241,9 @@ def _test():
         weeks=0
     )
 
-    #Задаем количество суток для прогноза
+    # Задаем количество суток для прогноза
     dt_end = dt_start + timedelta(
         days=2,
-#        seconds=5689,
         seconds=0,
         microseconds=0,
         milliseconds=0,
@@ -256,55 +252,33 @@ def _test():
         weeks=0
     )
 
-    t_semki  = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape, pos_gt_1, Fd)
-    for t_semki in t_semki:
-        vitok_memory, data_on , pos_geo_s_on, data_off ,pos_geo_s_off, vremya_kontakta = t_semki
-        print(vitok_memory)
- #   sheet1 = book.add_sheet(str(Fd))
- #   for num in range(len(Fd_m_1)):
-
-#        row = sheet1.row(num)
-#        row.write(0, i_m[num])
-#        row.write(1, dt_m[num])
-#        row.write(2, lon_s_m[num])
-#        row.write(3, lat_s_m[num])
-#        row.write(4, R_s_m[num])
-#        row.write(5, R_e_m[num])
-#        row.write(6, R_0_m[num])
-#        row.write(7, y_grad_m[num])
-#        row.write(8, ay_grad_m[num])
-#        row.write(9, a_m[num])
-#        row.write(10, Fd_m_1[num])
-#        row.write(11, Wp_m_1[num])
-
-#    book.save(filename + "_Fd" + ".xls")
-  #  plt.title('Доплеровское смещение частоты отраженного сигнала в зависимости от угла скоса и угловой скорости подспутниковой точки')
-  #  plt.xlabel('скорость подспутниковой точки')
-  #  plt.ylabel('Fd,Гц')
-  #  plt.plot( a_m, Wp_m_1, 'ro')
-   # plt.show()
-
+    # Словарь для хранения результатов для разных Fd
+    results = {}
+    
+    for Fd in Fd_values:
+        t_semki = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape, pos_gt_1, Fd)
+        results[Fd] = t_semki
+        print(f"\nРезультаты для Fd = {Fd} Гц:")
+        for t in t_semki:
+            vitok_memory, data_on, pos_geo_s_on, data_off, pos_geo_s_off, vremya_kontakta = t
+            print(f"Время контакта: {vremya_kontakta}, Виток: {vitok_memory}")
 
     # Вне цикла нам осталось записать созданный шейп-файл на диск.
-    # Т.к. мы знаем, что координаты положений ИСЗ были получены в WGS84
-    # можно заодно создать файл .prj с нужным описанием
-           
-       
-#    try:
-#        # Создаем файл .prj с тем же именем, что и выходной .shp
-#        prj = open("%s.prj" % filename.replace(".shp", ""), "w")
-#        # Создаем переменную с описанием EPSG:4326 (WGS84)
-#        wgs84_wkt = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
-#        # Записываем её в файл .prj
-#        prj.write(wgs84_wkt)
-#        # И закрываем его
-#        prj.close()
-#        # Функцией save также сохраняем и сам шейп.
-#        track_shape.save(filename + ".shp")
-#    except:
+    try:
+        # Создаем файл .prj с тем же именем, что и выходной .shp
+        prj = open("%s.prj" % filename.replace(".shp", ""), "w")
+        # Создаем переменную с описанием EPSG:4326 (WGS84)
+        wgs84_wkt = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
+        # Записываем её в файл .prj
+        prj.write(wgs84_wkt)
+        # И закрываем его
+        prj.close()
+        # Функцией save также сохраняем и сам шейп.
+        track_shape.save(filename + ".shp")
+    except:
         # Вдруг нет прав на запись или вроде того...
-#        print("Unable to save shapefile")
-#        return
+        print("Unable to save shapefile")
+        return
 
 if __name__ == "__main__":
     _test()
