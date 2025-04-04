@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.constants import c, G, pi
-from scipy.special import j1, sinc
+from scipy.special import sinc
 from scipy.signal.windows import hann
 from typing import Dict, Tuple
 
@@ -10,9 +10,9 @@ class SARSystem:
         """Класс для проектирования SAR-системы на малых спутниках
         
         Args:
-            config (Dict): Словарь с параметрами системы:
-                - h_sar: Высота орбиты спутника [м]
-                - f0: Центральная частота [Гц]
+            config (Dict): Конфигурация системы с параметрами:
+                - h_sar: Высота орбиты [м]
+                - f0: Рабочая частота [Гц]
                 - gamma: Угол места [град]
                 - grg_res: Разрешение по дальности [м]
                 - az_res: Разрешение по азимуту [м]
@@ -22,8 +22,8 @@ class SARSystem:
                 - P_avg: Средняя мощность [Вт]
         """
         self.config = config
-        self.R_earth = 6371e3  # Радиус Земли в метрах
-        
+        self.R_earth = 6371e3  # Средний радиус Земли [м]
+
     def orbit_velocity(self, h: float) -> float:
         """Расчет орбитальной скорости для круговой орбиты
         
@@ -39,272 +39,189 @@ class SARSystem:
         """Расчет геометрических параметров SAR
         
         Args:
-            gamma (float): Угол места в градусах
+            gamma (float): Угол места [град]
             
         Returns:
             Tuple[float, float, float]:
                 - eta_c: Угол падения [рад]
-                - R_c: Наклонная дальность до цели [м]
+                - R_c: Наклонная дальность [м]
                 - gamma_rad: Угол места [рад]
         """
         h = self.config['h_sar']
-        R_s = self.R_earth + h  # Радиус орбиты спутника
-        gamma_rad = np.deg2rad(gamma)  # Преобразование в радианы
+        R_s = self.R_earth + h
+        gamma_rad = np.deg2rad(gamma)
         
-        # Расчет угла падения по закону синусов
+        # Расчет угла падения
         eta_c = np.arcsin(R_s / self.R_earth * np.sin(gamma_rad))
         
-        # Расчет наклонной дальности до цели
+        # Расчет наклонной дальности
         R_c = R_s * np.cos(eta_c) - np.sqrt(
             self.R_earth**2 - R_s**2 + R_s**2 * np.cos(eta_c)**2
         )
         return eta_c, R_c, gamma_rad
     
     def minimum_antenna_area(self, gamma_range: np.ndarray) -> np.ndarray:
-        """Расчет минимальной площади антенны (формула 2.11 из исследования)
+        """Расчет минимальной площади антенны (формула 2.11)
         
         Args:
-            gamma_range (np.ndarray): Диапазон углов места в градусах
+            gamma_range (np.ndarray): Диапазон углов места [град]
             
         Returns:
-            np.ndarray: Минимальные площади антенны для каждого угла [м²]
+            np.ndarray: Минимальные площади антенны [м²]
         """
-        f0 = self.config['f0']  # Частота несущей
-        h = self.config['h_sar']  # Высота орбиты
-        v = self.orbit_velocity(h)  # Орбитальная скорость
-        areas = []  # Список для хранения результатов
+        f0 = self.config['f0']
+        h = self.config['h_sar']
+        v = self.orbit_velocity(h)
+        areas = []
         
         for gamma in gamma_range:
-            # Расчет геометрических параметров
             eta_c, R_c, _ = self.calculate_geometry(gamma)
-            
-            # Применение формулы 2.11
             area = (4 * c / f0) * R_c * v * np.tan(eta_c)
             areas.append(area)
             
         return np.array(areas)
     
     def ambiguity_analysis(self, gamma: float, PRF: float) -> Dict:
-        """Анализ неоднозначностей по дальности и азимуту
+        """Анализ неоднозначностей SAR
         
         Args:
             gamma (float): Угол места [град]
             PRF (float): Частота повторения импульсов [Гц]
             
         Returns:
-            Dict: Результаты анализа:
-                - AASR: Отношение сигнал-неоднозначность по азимуту [дБ]
-                - RASR: Отношение сигнал-неоднозначность по дальности [дБ]
-                - PRF_min: Минимальная допустимая PRF [Гц]
+            Dict: Результаты анализа неоднозначностей
         """
         config = self.config
-        lambda0 = c / config['f0']  # Длина волны
+        lambda0 = c / config['f0']
         h = config['h_sar']
-        v = self.orbit_velocity(h)  # Скорость спутника
+        v = self.orbit_velocity(h)
         
-        # Расчет параметров геометрии
         eta_c, R_c, _ = self.calculate_geometry(gamma)
-        
-        # Расчет наклонной ширины полосы
         swath_slant = config['swath'] * np.sin(eta_c)
         
-        # Расчет доплеровской полосы
-        L_az = config['L_az']  # Длина антенны
-        theta_az = lambda0 / L_az  # Ширина луча по азимуту
-        B_dop = 2 * v * theta_az / lambda0  # Доплеровская полоса
-        
-        # Расчет отношений неоднозначности
-        AASR = self._calculate_AASR(PRF, B_dop, L_az)
-        RASR = self._calculate_RASR(PRF, R_c, swath_slant, eta_c)
+        L_az = config['L_az']
+        theta_az = lambda0 / L_az
+        B_dop = 2 * v * theta_az / lambda0
         
         return {
-            'AASR': AASR,
-            'RASR': RASR,
-            'PRF_min': B_dop  # Минимальная PRF по Найквисту
+            'AASR': self._calculate_AASR(PRF, B_dop),
+            'RASR': self._calculate_RASR(PRF, swath_slant, eta_c),
+            'PRF_min': B_dop
         }
     
-    def _calculate_AASR(self, PRF: float, B_dop: float, L_az: float) -> float:
-        """Расчет отношения сигнал-неоднозначность по азимуту
-        
-        Упрощенная модель для демонстрации (формула 2.15)
-        """
+    def _calculate_AASR(self, PRF: float, B_dop: float) -> float:
+        """Расчет азимутальной неоднозначности"""
         return 10 * np.log10((B_dop / PRF)**2)
     
-    def _calculate_RASR(self, PRF: float, R_c: float, 
-                       swath_slant: float, eta_c: float) -> float:
-        """Расчет отношения сигнал-неоднозначность по дальности
-        
-        Упрощенная модель для демонстрации (формула 2.19)
-        """
-        tau_swath = 2 * swath_slant / c  # Временная длительность полосы
+    def _calculate_RASR(self, PRF: float, swath_slant: float, eta_c: float) -> float:
+        """Расчет дальностной неоднозначности"""
+        tau_swath = 2 * swath_slant / c
         return 10 * np.log10((tau_swath * PRF)**2 * np.cos(eta_c))
     
-    def plot_antenna_pattern_uniform(self, pattern_type: str = 'uniform'):
+    def plot_antenna_pattern(self, pattern_type: str = 'uniform'):
         """Визуализация диаграммы направленности антенны
         
         Args:
-            pattern_type (str): Тип апертуры:
-                - 'uniform': Равномерное распределение
-                - 'hanning': Оконная функция Хэмминга
+            pattern_type (str): Тип распределения:
+                - 'uniform': Равномерное
+                - 'hanning': С оконной функцией Хэмминга
         """
-        theta = np.linspace(-np.pi/2, np.pi/2, 1000)  # Углы сканирования
-        L = self.config['L_az']  # Длина антенны
-        lambda0 = c / self.config['f0']  # Длина волны
+        theta = np.linspace(-np.pi/2, np.pi/2, 1000)
+        L = self.config['L_az']
+        lambda0 = c / self.config['f0']
         
-        # Расчет диаграммы направленности
         if pattern_type == 'uniform':
-            # Равномерное распределение (sinc-функция)
-            pattern = np.sinc(L * np.sin(theta) / lambda0)**2
+            pattern = (np.sinc(L * np.sin(theta) / lambda0))**2
         elif pattern_type == 'hanning':
-            # Оконная функция Хэмминга (FFT-based)
-            window = hann(int(L * 1e2))  # Дискретизация антенны
-            pattern = np.abs(np.fft.fft(window))**2
-            pattern /= np.max(pattern)  # Нормализация
+            n = len(theta)
+            window = hann(n)
+            pattern = np.abs(np.fft.fftshift(np.fft.fft(window)))**2
+            pattern /= np.max(pattern)
+            
+            # Масштабирование углов для физической интерпретации
+            k = L / lambda0
+            theta = np.arcsin(np.linspace(-1, 1, n) / k)
         else:
-            raise ValueError("Неподдерживаемый тип диаграммы")
+            raise ValueError("Неподдерживаемый тип распределения")
         
-        # Построение графика
         plt.figure(figsize=(10, 6))
         plt.plot(np.degrees(theta), 10 * np.log10(pattern))
         plt.title(f"Диаграмма направленности ({pattern_type})")
         plt.xlabel('Угол [град]')
-        plt.ylabel('Мощность [дБ]')
+        plt.ylabel('Нормированная мощность [дБ]')
         plt.grid(True)
+        plt.ylim(-40, 0)
         plt.show()
-    
-    def plot_antenna_pattern_hanning(self, pattern_type: str = 'uniform'):
-        """Визуализация диаграммы направленности антенны
-    
-        Args:
-            pattern_type (str): Тип апертуры:
-                - 'uniform': Равномерное распределение
-                - 'hanning': Оконная функция Хэмминга
-        """
-        theta = np.linspace(-np.pi/2, np.pi/2, 1000)  # Углы сканирования
-        L = self.config['L_az']  # Длина антенны
-        lambda0 = c / self.config['f0']  # Длина волны
-    
-        # Расчет диаграммы направленности
-        if pattern_type == 'uniform':
-            # Равномерное распределение (sinc-функция)
-            pattern = np.sinc(L * np.sin(theta) / lambda0)**2
-        elif pattern_type == 'hanning':
-            # Оконная функция Хэмминга (FFT-based)
-            n_points = 1000  # Используем то же количество точек, что и для theta
-            window = hann(n_points)  # Создаем окно с нужным количеством точек
-            pattern = np.abs(np.fft.fftshift(np.fft.fft(window)))**2
-            pattern = pattern / np.max(pattern)  # Нормализация
-        
-            # Интерполяция для соответствия размеру theta
-            if len(pattern) != len(theta):
-                # Создаем новые координаты для интерполяции
-                x_old = np.linspace(0, 1, len(pattern))
-                x_new = np.linspace(0, 1, len(theta))
-                pattern = np.interp(x_new, x_old, pattern)
-        else:
-            raise ValueError("Неподдерживаемый тип диаграммы")
-    
-    # Построение графика
-    plt.figure(figsize=(10, 6))
-    plt.plot(np.degrees(theta), 10 * np.log10(pattern))
-    plt.title(f"Диаграмма направленности ({pattern_type})")
-    plt.xlabel('Угол [град]')
-    plt.ylabel('Мощность [дБ]')
-    plt.grid(True)
-    plt.show()
 
     def design_flow(self, mode: str = 'ideal') -> Dict:
-        """Основной процесс проектирования SAR-системы
+        """Процесс проектирования SAR-системы
         
         Args:
             mode (str): Режим проектирования:
-                - 'ideal': Идеальный случай (без ограничений)
-                - 'constrained': С учетом ограничений платформы
-                
-        Returns:
-            Dict: Результаты проектирования
+                - 'ideal': Без ограничений
+                - 'constrained': С ограничениями
         """
         if mode == 'ideal':
-            return self._ideal_design_flow()
-        elif mode == 'constrained':
-            return self._constrained_design_flow()
-        else:
-            raise ValueError("Некорректный режим проектирования")
-
-    def _ideal_design_flow(self) -> Dict:
-        """Идеальное проектирование (без ограничений)
-        
-        Шаги:
-        1. Расчет базовых параметров орбиты
-        2. Определение разрешения и ширины полосы
-        3. Оптимизация параметров антенны
-        4. Выбор оптимальной PRF
-        """
+            return self._ideal_design()
+        return self._constrained_design()
+    
+    def _ideal_design(self) -> Dict:
+        """Идеальное проектирование системы"""
         h = self.config['h_sar']
         v = self.orbit_velocity(h)
-        
-        # Расчет требуемой полосы пропускания
-        grg_res = self.config['grg_res']
         eta_c = np.deg2rad(self.config['gamma'])
-        B_required = c / (2 * grg_res * np.sin(eta_c))
         
-        # Расчет длины антенны из разрешения по азимуту
-        L_az = 2 * self.config['az_res']
-        
-        return {'status': 'success', 'parameters': {
-            'Bandwidth': B_required,
-            'Antenna_Length': L_az
-        }}
-
-    def _constrained_design_flow(self) -> Dict:
-        """Проектирование с учетом ограничений платформы
-        
-        Учитывает:
-        - Максимальный размер антенны
-        - Ограничения по мощности
-        - Ограничения по передаче данных
-        """
-        # Реализация требует детальных уравнений из исследования
-        return {'status': 'success', 'parameters': {}}
+        return {
+            'Bandwidth': c / (2 * self.config['grg_res'] * np.sin(eta_c)),
+            'Antenna_Length': 2 * self.config['az_res']
+        }
+    
+    def _constrained_design(self) -> Dict:
+        """Проектирование с учетом ограничений"""
+        # Реализация требует дополнительных специфических расчетов
+        return {'status': 'Не реализовано'}
 
 if __name__ == "__main__":
-    # Пример конфигурации SAR-системы (параметры TerraSAR-X)
+    # Пример конфигурации для TerraSAR-X
     sar_config = {
-        'h_sar': 500e3,      # Высота орбиты: 500 км
-        'f0': 9.65e9,        # X-диапазон (9.65 ГГц)
-        'gamma': 30,         # Угол места: 30°
-        'grg_res': 3.0,      # Разрешение по дальности: 3 м
-        'az_res': 3.0,       # Разрешение по азимуту: 3 м
-        'swath': 30e3,       # Ширина полосы: 30 км
-        'tau_p': 30e-6,      # Длительность импульса: 30 мкс
-        'L_az': 4.8,         # Длина антенны: 4.8 м
-        'P_avg': 300         # Средняя мощность: 300 Вт
+        'h_sar': 500e3,
+        'f0': 9.65e9,
+        'gamma': 30,
+        'grg_res': 3.0,
+        'az_res': 3.0,
+        'swath': 30e3,
+        'tau_p': 30e-6,
+        'L_az': 4.8,
+        'P_avg': 300
     }
     
-    # Инициализация SAR-системы
     sar = SARSystem(sar_config)
     
-    # Пример 1: Расчет минимальной площади антенны
-    gamma_range = np.linspace(20, 45, 25)  # Диапазон углов места
-    areas = sar.minimum_antenna_area(gamma_range)
+    # Пример 1: Анализ минимальной площади антенны
+    angles = np.linspace(20, 45, 25)
+    areas = sar.minimum_antenna_area(angles)
     
-    # Визуализация результатов
     plt.figure(figsize=(10, 6))
-    plt.plot(gamma_range, areas)
-    plt.title('Минимальная площадь антенны vs Угол места')
+    plt.plot(angles, areas)
+    plt.title('Зависимость минимальной площади антенны от угла места')
     plt.xlabel('Угол места [град]')
     plt.ylabel('Площадь антенны [м²]')
     plt.grid(True)
     plt.show()
     
     # Пример 2: Анализ неоднозначностей
-    ambiguity = sar.ambiguity_analysis(35, 3000)
-    print(f"Результаты анализа неоднозначностей при 35°: {ambiguity}")
+    analysis = sar.ambiguity_analysis(35, 3000)
+    print("Результаты анализа неоднозначностей:")
+    print(f"AASR: {analysis['AASR']:.2f} дБ")
+    print(f"RASR: {analysis['RASR']:.2f} дБ")
+    print(f"Минимальная PRF: {analysis['PRF_min']:.2f} Гц")
     
-    # Пример 3: Визуализация диаграмм направленности
-    sar.plot_antenna_pattern_uniform('uniform')  # Равномерное распределение
-    sar.plot_antenna_pattern_hanning('hanning')  # Оконная функция Хэмминга
+    # Пример 3: Диаграммы направленности
+    sar.plot_antenna_pattern('uniform')
+    sar.plot_antenna_pattern('hanning')
     
-    # Пример 4: Запуск процесса проектирования
-    design_result = sar.design_flow(mode='ideal')
-    print(f"Результаты проектирования: {design_result}")
+    # Пример 4: Процесс проектирования
+    design = sar.design_flow('ideal')
+    print("\nРезультаты проектирования:")
+    print(f"Требуемая полоса: {design['Bandwidth']/1e6:.2f} МГц")
+    print(f"Длина антенны: {design['Antenna_Length']:.2f} м")
