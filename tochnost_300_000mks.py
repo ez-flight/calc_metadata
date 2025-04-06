@@ -16,10 +16,10 @@ from pyorbital.orbital import Orbital  # Расчет орбитальной м�
 # Локальные модули
 from calc_cord import \
     get_xyzv_from_latlon  # Конвертация геодезических координат в ECEF
-from calc_F_L import (calc_f_doplera,  # Расчет доплеровских параметров
-                      calc_lamda)
-from read_TBF import (read_tle_base_file,  # Чтение TLE данных
-                      read_tle_base_internet)
+from calc_F_L import calc_f_doplera  # Расчет доплеровских параметров
+from calc_F_L import calc_lamda
+from read_TBF import read_tle_base_file  # Чтение TLE данных
+from read_TBF import read_tle_base_internet
 
 # ----------------------------
 # Глобальные константы
@@ -114,36 +114,36 @@ class SatelliteTracker:
                 return dt - step  # Возвращаем начало интервала
         return None
 
-    def find_exact_boundary(self, approx_dt: datetime, 
+     def find_exact_boundary(self, approx_dt: datetime, 
                            search_window: timedelta, 
                            is_start: bool,
                            ground_pos: Tuple) -> datetime:
         """
-        Бинарный поиск точной границы зоны съемки.
+        Бинарный поиск границы зоны съемки с пониженной точностью.
         
         Параметры:
         approx_dt: Приблизительное время границы
-        search_window: Временное окно поиска
+        search_window: Временное окно поиска (рекомендуется 10-60 секунд)
         is_start: Флаг поиска начала (True) или конца (False) зоны
         ground_pos: Координаты наземной станции
         
         Возвращает:
-        datetime: Уточненное время границы с точностью до 100 мкс
+        datetime: Время границы с точностью до 10 миллисекунд
         """
         low = approx_dt - search_window/2
         high = approx_dt + search_window/2
         
-        # 20 итераций обеспечивают точность ~1 мкс
-        for _ in range(20):
+        # 10 итераций обеспечивают точность ~10 мс для 60-секундного окна
+        for _ in range(10):
             mid = low + (high - low)/2
             angles = self.calculate_angles(mid, ground_pos)
             in_zone = self.is_in_shooting_zone(angles)
-            
-            # Логика бинарного поиска для разных типов границ
+        # Логика бинарного поиска для разных типов границ           
             if (in_zone and is_start) or (not in_zone and not is_start):
                 high = mid
             else:
                 low = mid
+                
         return mid
 
     def calculate_angles(self, dt: datetime, ground_pos: Tuple) -> Dict[str, float]:
@@ -353,11 +353,12 @@ def save_to_excel(data: List[Tuple], filename: str, params, tracker: SatelliteTr
         orbit_num, points, start_time, end_time, duration = orbit
         for point in points:
             dt, (lon, lat, alt), Fd = point
+            # Получение актуальных углов для текущей временной метки
             angles = tracker.calculate_angles(dt, params.pos_gt)
             
             # Запись данных в строку
             ws.cell(row=row, column=1, value=orbit_num)
-            ws.cell(row=row, column=2, value=dt.strftime("%Y-%m-%d %H:%M:%S.%f"))
+            ws.cell(row=row, column=2, value=dt.strftime("%Y-%m-%d %H:%M:%S.%f"))  # Формат с микросекундами
             ws.cell(row=row, column=3, value=lon)
             ws.cell(row=row, column=4, value=lat)
             ws.cell(row=row, column=5, value=alt)
@@ -366,94 +367,114 @@ def save_to_excel(data: List[Tuple], filename: str, params, tracker: SatelliteTr
             ws.cell(row=row, column=8, value=angles['R_e'])
             ws.cell(row=row, column=9, value=angles['R_0'])
             ws.cell(row=row, column=10, value=angles['y_grad'])
+            ws.cell(row=row, column=11, value=angles['ay_grad'])
             
-            row += 1
+            row += 1  # Переход к следующей строке
     
+    # Автоподбор ширины столбцов на основе содержимого
     for col in ws.columns:
         max_length = 0
-        column = col[0].column_letter
+        column = col[0].column_letter  # Получение буквенного обозначения столбца
         for cell in col:
             try:
+                # Поиск максимальной длины значения в столбце
                 if len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
             except:
                 pass
-        adjusted_width = (max_length + 2) * 1.2
+        adjusted_width = (max_length + 2) * 1.2  # Расчет ширины с запасом
         ws.column_dimensions[column].width = adjusted_width
     
     wb.save(filename)
     print(f"Данные сохранены в Excel файл: {filename}")
 
 def _test():
-    s_name, tle_1, tle_2 = read_tle_base_file(56756)
+    """Функция тестирования основных возможностей модуля"""
+    # Инициализация параметров спутника из локального файла
+    s_name, tle_1, tle_2 = read_tle_base_file(56756)  # Чтение TLE для спутника с номером 56756
+    
+    # Координаты наземной станции (Санкт-Петербург)
     pos_gt = (59.95, 30.316667, 0)
     
+    # Настройка параметров наблюдения
     params = ObservationParameters()
     params.pos_gt = pos_gt
-    params.dt_start = datetime(2024, 2, 21, 3, 0, 0)
-    params.delta = timedelta(seconds=10)
-    params.delta_obn = timedelta(seconds=5)
-    params.dt_end = params.dt_start + timedelta(days=2)
+    params.dt_start = datetime(2024, 2, 21, 3, 0, 0)  # Начало наблюдения
+    params.delta = timedelta(seconds=10)  # Основной шаг расчета
+    params.delta_obn = timedelta(seconds=5)  # Шаг во время съемки
+    params.dt_end = params.dt_start + timedelta(days=2)  # Окончание через 2 дня
     
+    # Инициализация трекера с загруженными TLE-данными
     tracker = SatelliteTracker(tle_1, tle_2)
     
+    # Настройка выходного shapefile
     shp_filename = f"result/{s_name}"
     track_shape = shapefile.Writer(shp_filename, shapefile.POINT)
     
     try:
+        # Определение структуры атрибутов для shapefile
         fields = [
-            ("ID", "N", 10),
-            ("TIME", "C", 40),
-            ("LON", "F", 10, 10),
-            ("LAT", "F", 10, 10),
-            ("R_s", "F", 10, 5),
-            ("R_t", "F", 10, 5),
-            ("R_n", "F", 10, 5),
-            ("ϒ", "F", 10, 5),
-            ("φ", "F", 10, 5),
-            ("λ", "F", 10, 10),
-            ("f", "F", 10, 5)
+            ("ID", "N", 10),          # Числовой идентификатор витка
+            ("TIME", "C", 40),        # Строка времени с микросекундами
+            ("LON", "F", 10, 10),     # Долгота с 10 знаками
+            ("LAT", "F", 10, 10),     # Широта с 10 знаками
+            ("R_s", "F", 10, 5),      # Расстояние до спутника
+            ("R_t", "F", 10, 5),      # Расстояние до точки
+            ("R_n", "F", 10, 5),      # Расстояние между спутником и точкой
+            ("ϒ", "F", 10, 5),        # Угол визирования
+            ("φ", "F", 10, 5),        # Угол места
+            ("λ", "F", 10, 10),       # Длина волны
+            ("f", "F", 10, 5)         # Доплеровская частота
         ]
         
+        # Добавление полей в shapefile
         for field in fields:
             if len(field) == 3:
                 track_shape.field(*field)
             else:
                 track_shape.field(field[0], field[1], field[2], field[3])
         
+        # Тестирование для диапазона углов от 85° до 94°
         angle_values = range(85, 95, 1)
-        results = {}
+        results = {}  # Словарь для хранения результатов
         
         for angle in angle_values:
+            # Генерация трека для текущего угла
             t_semki = create_orbital_track(tracker, params, track_shape, angle)
             results[angle] = t_semki
             
+            # Экспорт в Excel
             excel_filename = f"result/{s_name}_angle_{angle}.xlsx"
             save_to_excel(t_semki, excel_filename, params, tracker)
             
+            # Вывод статистики в консоль
             print(f"\nУгол {angle}°:")
             for orbit in t_semki:
                 fd_values = [point[2] for point in orbit[1]]
                 if fd_values:
                     print(f"Виток {orbit[0]}: точек {len(orbit[1])}, Fd от {min(fd_values):.2f} до {max(fd_values):.2f} Гц")
         
+        # Сохранение shapefile
         track_shape.save(shp_filename)
         print(f"\nShapefile сохранен: {shp_filename}.shp")
         
     except Exception as e:
         print(f"Ошибка: {str(e)}")
     finally:
+        # Гарантированное закрытие ресурсов
         if 'track_shape' in locals():
             try:
                 track_shape.close()
             except:
                 pass
     
+    # Создание PRJ-файла с проекцией WGS84 для корректного отображения в GIS-системах
     try:
         with open(f"{shp_filename}.prj", "w") as prj:
             prj.write('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
     except Exception as e:
         print(f"Ошибка при создании PRJ-файла: {e}")
 
+# Точка входа при запуске скрипта напрямую
 if __name__ == "__main__":
-    _test()
+    _test()  # Запуск тестовой функции
