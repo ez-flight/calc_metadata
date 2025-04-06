@@ -9,13 +9,17 @@ from typing import Any, Dict, List, Optional, Tuple  # Аннотации тип
 
 import shapefile  # Создание и запись GIS shapefiles
 from openpyxl import Workbook  # Генерация Excel-отчетов
-from openpyxl.utils import get_column_letter  # Вспомогательные функции для Excel
+from openpyxl.utils import \
+    get_column_letter  # Вспомогательные функции для Excel
 from pyorbital.orbital import Orbital  # Расчет орбитальной механики
 
 # Локальные модули
-from calc_cord import get_xyzv_from_latlon  # Конвертация геодезических координат в ECEF
-from calc_F_L import calc_f_doplera, calc_lamda  # Расчет доплеровских параметров
-from read_TBF import read_tle_base_file, read_tle_base_internet  # Чтение TLE данных
+from calc_cord import \
+    get_xyzv_from_latlon  # Конвертация геодезических координат в ECEF
+from calc_F_L import (calc_f_doplera,  # Расчет доплеровских параметров
+                      calc_lamda)
+from read_TBF import (read_tle_base_file,  # Чтение TLE данных
+                      read_tle_base_internet)
 
 # ----------------------------
 # Глобальные константы
@@ -184,7 +188,7 @@ def calculate_angles(R_s: Tuple[float, float, float],
     y = math.acos((R_0_norm**2 + R_s_norm**2 - R_e_norm**2) / (2 * R_0_norm * R_s_norm))
     
     # Угол места (возвышения антенны)
-    ay = math.acos((R_0_norm * math.sin(y)) / R_e_norm
+    ay = math.acos((R_0_norm * math.sin(y)) / R_e_norm)
     
     return {
         'R_s': R_s_norm,
