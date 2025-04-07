@@ -4,9 +4,12 @@
 
 # Импорт необходимых библиотек
 import math  # Математические функции и константы
+import os
+import zipfile
 from datetime import datetime, timedelta  # Работа с датой и временем
 from typing import Any, Dict, List, Optional, Tuple  # Аннотации типов
 
+import requests
 import shapefile  # Создание и запись GIS shapefiles
 from openpyxl import Workbook  # Генерация Excel-отчетов
 from openpyxl.utils import \
@@ -156,6 +159,44 @@ class SatelliteTracker:
     def is_in_shooting_zone(self, angles: Dict[str, float]) -> bool:
         """Проверяет выполнение условий съемки: угол визирования 24-55° и видимость."""
         return 24 <= angles['y_grad'] <= 55 and angles['R_0'] < angles['R_e']
+
+def create_zip_archive(source_dir: str, output_path: str) -> None:
+    """
+    Создает zip-архив из указанной директории.
+    
+    Параметры:
+    source_dir (str): Путь к папке для архивации
+    output_path (str): Путь для сохранения архива
+    """
+    with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(source_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, start=source_dir)
+                zipf.write(file_path, arcname=arcname)
+
+def send_to_telegram(file_path: str, bot_token: str, chat_id: str) -> bool:
+    """
+    Отправляет файл через Telegram бота.
+    
+    Параметры:
+    file_path (str): Путь к отправляемому файлу
+    bot_token (str): Токен Telegram бота
+    chat_id (str): ID чата для отправки
+    
+    Возвращает:
+    bool: True если отправка успешна, False в случае ошибки
+    """
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+    try:
+        with open(file_path, 'rb') as file:
+            files = {'document': file}
+            data = {'chat_id': chat_id}
+            response = requests.post(url, files=files, data=data)
+            return response.status_code == 200
+    except Exception as e:
+        print(f"Ошибка отправки файла: {str(e)}")
+        return False
 
 def calculate_angles(R_s: Tuple[float, float, float], 
                     V_s: Tuple[float, float, float],
@@ -391,6 +432,9 @@ def save_to_excel(data: List[Tuple], filename: str, params, tracker: SatelliteTr
 
 def _test():
     """Функция тестирования основных возможностей модуля"""
+    # Конфигурация Telegram
+    BOT_TOKEN = "ВАШ_ТОКЕН_БОТА"  # Замените на реальный токен
+    CHAT_ID = "ВАШ_CHAT_ID"       # Замените на реальный chat_id
     # Инициализация параметров спутника из локального файла
     s_name, tle_1, tle_2 = read_tle_base_file(56756)  # Чтение TLE для спутника с номером 56756
     
@@ -475,6 +519,23 @@ def _test():
             prj.write('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
     except Exception as e:
         print(f"Ошибка при создании PRJ-файла: {e}")
+    
+            # Создаем zip-архив
+        zip_path = "result.zip"
+        create_zip_archive("result", zip_path)
+        
+        # Отправляем архив в Telegram
+        if send_to_telegram(zip_path, BOT_TOKEN, CHAT_ID):
+            print("Архив успешно отправлен в Telegram")
+        else:
+            print("Ошибка отправки архива")
+            
+    except Exception as e:
+        print(f"Ошибка: {str(e)}")
+    finally:
+        # Очистка временных файлов
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
 
 # Точка входа при запуске скрипта напрямую
 if __name__ == "__main__":
