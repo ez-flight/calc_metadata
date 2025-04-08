@@ -110,9 +110,3 @@ for config in configurations:
         condition = calculate_Fd(config['alpha'], config['h'], lambda_range)/1e3 < max_Fd
         print(f"Допустимые длины волн при h={config['h']}км, α={config['alpha']}°: "
               f"{print_valid_ranges(lambda_range, condition, 'м')}")
-
-# Пример вывода для параметров ДЗЗ
-print("\nРекомендуемые параметры для L-диапазона:")
-print("| Высота | Угол места | Длина волны | Макс Fd |")
-print("|--------|------------|-------------|---------|")
-print("| 700 км |   25-60°   |   0.18-0.25м|  50 кГц |")
