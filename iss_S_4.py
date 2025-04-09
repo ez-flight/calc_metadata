@@ -15,7 +15,7 @@ inc = 97.4         # Наклонение орбиты (град)
 
 def earth_ellipsoid(lat):
     """Модель эллипсоида Земли"""
-    return R_earth / np.sqrt(1 - (e_earth**2 * np.sin(np.deg2rad(lat))**2)
+    return R_earth / np.sqrt(1 - (e_earth**2 * np.sin(np.deg2rad(lat))**2))
 
 def sar_geometry(lat, look_angle):
     """
