@@ -1,266 +1,180 @@
 import math
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
-# Библиотека графиков
 import matplotlib.pyplot as plt
 import numpy as np
 import shapefile
-import xlwt
-# Ключевой класс библиотеки pyorbital
 from pyorbital.orbital import Orbital
 
 from calc_cord import get_xyzv_from_latlon
-from calc_F_L import calc_f_doplera, calc_lamda
-from read_TBF import read_tle_base_file, read_tle_base_internet
+from calc_F_L import calc_f_doplera
+from read_TBF import read_tle_base_file
 
-#from sgp4.earth_gravity import wgs84
+# Константы
+WAVELENGTH = 0.000096  # Длина волны в метрах
 
+def get_lat_lon_sgp(orb, utc_time):
+    return orb.get_lonlatalt(utc_time)
 
+def get_position(orb, utc_time):
+    return orb.get_position(utc_time, False)
 
-def get_lat_lon_sgp(tle_1, tle_2, utc_time):
-    # Инициализируем экземпляр класса Orbital двумя строками TLE
-    orb = Orbital("N", line1=tle_1, line2=tle_2)
-    # Вычисляем географические координаты функцией get_lonlatalt, её аргумент - время в UTC.
-    lon, lat, alt = orb.get_lonlatalt(utc_time)
-    return lon, lat, alt
+def vectorized_calculations(R_s, V_s, pos_it):
+    R_s = np.asarray(R_s)
+    pos_it = np.asarray(pos_it)
+    
+    R_s_norm = np.linalg.norm(R_s)
+    R_0 = np.linalg.norm(R_s - pos_it)
+    R_e = np.linalg.norm(pos_it)
+    V_s_norm = np.linalg.norm(V_s)
+    
+    # Проверка деления на ноль и корректности аргументов arccos
+    try:
+        denominator = 2 * R_0 * R_s_norm
+        if denominator == 0:
+            return (R_s_norm, R_0, R_e, V_s_norm, np.nan, np.nan)
+        
+        cos_y = (R_0**2 + R_s_norm**2 - R_e**2) / denominator
+        cos_y = np.clip(cos_y, -1.0, 1.0)
+        y = math.acos(cos_y)
+        y_grad = np.degrees(y)
+    except:
+        y_grad = np.nan
 
+    try:
+        if R_e == 0:
+            return (R_s_norm, R_0, R_e, V_s_norm, y_grad, np.nan)
+        
+        cos_ay = (R_0 * math.sin(y)) / R_e if y_grad is not np.nan else 0
+        cos_ay = np.clip(cos_ay, -1.0, 1.0)
+        ay = math.acos(cos_ay)
+        ay_grad = np.degrees(ay)
+    except:
+        ay_grad = np.nan
 
-def get_position(tle_1, tle_2, utc_time):
-    # Инициализируем экземпляр класса Orbital двумя строками TLE
-    orb = Orbital("N", line1=tle_1, line2=tle_2)
-    # Вычисляем географические координаты функцией get_lonlatalt, её аргумент - время в UTC.
-    R_s, V_s = orb.get_position(utc_time, False)
-    X_s, Y_s, Z_s = R_s
-    Vx_s, Vy_s, Vz_s = V_s
-    return X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s
+    return (R_s_norm, R_0, R_e, V_s_norm, y_grad, ay_grad)
 
+def create_orbital_data(orb, dt_start, dt_end, delta, pos_gt, a_values):
+    timestamps = np.arange(dt_start, dt_end, delta).astype(datetime)
+    n = len(timestamps)
+    
+    a_values_ext = np.resize(a_values, n)
+    
+    data = {
+        'dt': timestamps,
+        'lon_s': np.full(n, np.nan),
+        'lat_s': np.full(n, np.nan),
+        'R_s': np.full(n, np.nan),
+        'R_0': np.full(n, np.nan),
+        'R_e': np.full(n, np.nan),
+        'y_grad': np.full(n, np.nan),
+        'ay_grad': np.full(n, np.nan),
+        'Fd': np.full(n, np.nan),
+        'Wp': np.full(n, np.nan),
+        'a_values': a_values_ext
+    }
 
-def create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape,pos_gt, a):
- 
-    # Угловая скорость вращения земли
-    We = 7.2292115E-5
-    # Радиус земли
-    Re = 6378.140
-    # Длина волны
-    Lam=0.000096
-    # Координаты объекта в геодезической СК
-    lat_t, lon_t, alt_t = pos_gt
-    # Время начала расчетов
-    dt = dt_start
+    for i, dt in enumerate(timestamps):
+        try:
+            # Получение позиции спутника
+            R_s, V_s = get_position(orb, dt)
+            pos_it, _ = get_xyzv_from_latlon(dt, *pos_gt)
+            
+            # Вычисление параметров
+            (data['R_s'][i], 
+             data['R_0'][i], 
+             data['R_e'][i], 
+             _, 
+             data['y_grad'][i], 
+             data['ay_grad'][i]) = vectorized_calculations(R_s, V_s, pos_it)
+            
+            # Получение геодезических координат
+            lon, lat, alt = get_lat_lon_sgp(orb, dt)
+            data['lon_s'][i] = lon
+            data['lat_s'][i] = lat
+            
+            # Проверка условий для расчета Fd
+            if (24 < data['y_grad'][i] < 55 and 
+                data['R_0'][i] < data['R_e'][i] and 
+                not np.isnan(data['ay_grad'][i])):
+                
+                # Расчет угловой скорости
+                data['Wp'][i] = 1674 * math.cos(math.radians(lat))
+                
+                # Расчет доплеровской частоты
+                if not np.isnan(data['a_values'][i]):
+                    data['Fd'][i] = calc_f_doplera(
+                        data['a_values'][i], 
+                        WAVELENGTH,
+                        math.radians(data['ay_grad'][i]),
+                        R_s, 
+                        V_s, 
+                        data['R_0'][i], 
+                        data['R_s'][i], 
+                        data['R_e'][i], 
+                        np.linalg.norm(V_s)
+                    )
+        except Exception as e:
+            print(f"Ошибка обработки точки {i}: {str(e)}")
+            continue
+    
+    return data
 
-    i_m = []
-    dt_m = []
-    lon_s_m = []
-    lat_s_m = []
-    R_s_m = []
-    R_e_m = []
-    R_0_m = []
-    y_grad_m = []
-    ay_grad_m = []
-    a_m = []
-    Wp_m = []
-    Fd_m = []
-
-    # Объявляем счётчики, i для идентификаторов, minutes для времени
-    i = 0
-    # Цикл расчета в заданном интервале времени
-    while dt < dt_end:
-        # Считаем положение спутника в инерциальной СК
-        X_s, Y_s, Z_s, Vx_s, Vy_s, Vz_s = get_position(tle_1, tle_2, dt)
-        Rs = X_s, Y_s, Z_s
-        Vs = Vx_s, Vy_s, Vz_s
-
-        # Считаем положение спутника в геодезической СК
-        lon_s, lat_s, alt_s = get_lat_lon_sgp(tle_1, tle_2, dt)
-
-        #Персчитываем положение объекта из геодезической в инерциальную СК  на текущее время с расчетом компонентов скорости точки на земле
-        pos_it, v_t = get_xyzv_from_latlon(dt, lon_t, lat_t, alt_t)
-        X_t, Y_t, Z_t = pos_it
-
-        #Расчет ----
-        R_s = math.sqrt((X_s**2)+(Y_s**2)+(Z_s**2))
-        R_0 = math.sqrt(((X_s-X_t)**2)+((Y_s-Y_t)**2)+((Z_s-Z_t)**2))
-        R_e = math.sqrt((X_t**2)+(Y_t**2)+(Z_t**2))
-        V_s = math.sqrt((Vx_s**2)+(Vy_s**2)+(Vz_s**2))
-
-        #Расчет двух углов
-        #Верхний (Угол Визирования)
-        y = math.acos(((R_0**2)+(R_s**2)-(R_e**2))/(2*R_0*R_s))
-        y_grad = y * (180/math.pi)
-        #Нижний (Угол места)
-        ay = math.acos(((R_0*math.sin(y))/R_e))
-        ay_grad = math.degrees(ay)
- #       if R_0 < R_e:
-        if  y_grad > 24 and y_grad < 55 and R_0 < R_e:
-            #Расчет угловой скорости вращения земли для подспутниковой точки
-            Wp = 1674 * math.cos(math.radians(lat_s))
-            Wp_m.append(Wp)
-     #       Wp = We * math.cos(lat_t)* Re
-           # Расчет угла a ведется в файле calc_F_L.py резкльтат в градусах
-            Fd = calc_f_doplera(a, Lam, ay, Rs, Vs, R_0, R_s, R_e, V_s)
-
-            i_m.append(i)
-            dt_m.append(dt)
-            lon_s_m.append(lon_s)
-            lat_s_m.append(lat_s)
-            R_s_m.append(R_s)
-            R_e_m.append(R_e)
-            R_0_m.append(R_0)
-            y_grad_m.append(y_grad)
-            ay_grad_m.append(ay_grad)
-            a_m.append(a)
-            Fd_m.append(Fd)
-#        print (f"Частота доплера - {Fd:.0f}, скорость {Wp}")
- #       print (f"{Fd}")
-  #          print (R_0)
-            # Создаём в шейп-файле новый объект
-            # Определеяем геометрию
-            track_shape.point(lon_s, lat_s)
-            # и атрибуты
-            track_shape.record(i, dt, lon_s, lat_s, R_s, R_e, R_0, y_grad, ay_grad, a, Fd)
-            # Не забываем про счётчики
- #       print(ugol)
-        i += 1
-        dt += delta
-
- #   print (i)
-    return track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m, Wp_m
-   
-
+def save_to_shapefile(data, filename):
+    with shapefile.Writer(filename, shapefile.POINT) as shp:
+        fields = [
+            ("ID", "N", 40), ("TIME", "C", 40), ("LON", "F", 40),
+            ("LAT", "F", 40), ("R_s", "F", 40), ("R_t", "F", 40),
+            ("R_n", "F", 40), ("ϒ", "F", 40, 5), ("φ", "F", 40, 5),
+            ("λ", "F", 40, 5), ("f", "F", 40, 5)
+        ]
+        for field in fields:
+            shp.field(*field)
+        
+        for i in range(len(data['dt'])):
+            if not np.isnan(data['Fd'][i]):
+                shp.point(data['lon_s'][i], data['lat_s'][i])
+                shp.record(
+                    i, data['dt'][i], data['lon_s'][i], data['lat_s'][i],
+                    data['R_s'][i], data['R_e'][i], data['R_0'][i],
+                    data['y_grad'][i], data['ay_grad'][i], 
+                    data['a_values'][i], data['Fd'][i]
+                )
+        
+    with open(f"{filename}.prj", "w") as prj:
+        prj.write('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
 
 def _test():
-
-    book = xlwt.Workbook(encoding="utf-8")
-
-    #25544 37849
-    # 56756 Кондор ФКА
     s_name, tle_1, tle_2 = read_tle_base_file(56756)
-    #s_name, tle_1, tle_2 = read_tle_base_internet(37849)
-        
-    # Координаты объекта в геодезической СК
-
-    lat_t = 59.95  #55.75583
-    lon_t = 30.316667 #37.6173
-    alt_t = 12
-    pos_gt_1 = lat_t, lon_t, alt_t
-    pos_gt_2 = (55.75583, 37.6173, 140)
-#    print (pos_gt_1)
- #   print (pos_gt_2)    
-     
-    a = 88.0
-
-    filename = "space/" + s_name
-#    filename1 = "space1/" + str(a) + "_" + s_name
-
-
-    print (filename)
-    # Создаём экземпляр класса Writer для создания шейп-файла, указываем тип геометрии
-    track_shape = shapefile.Writer(filename, shapefile.POINT)
-
-    # Добавляем поля - идентификатор, время, широту и долготу
-    # N - целочисленный тип, C - строка, F - вещественное число
-    # Для времени придётся использовать строку, т.к. нет поддержки формата "дата и время"
-    track_shape.field("ID", "N", 40)
-    track_shape.field("TIME", "C", 40)
-    track_shape.field("LON", "F", 40)
-    track_shape.field("LAT", "F", 40)
-    track_shape.field("R_s", "F", 40)
-    track_shape.field("R_t", "F", 40)
-    track_shape.field("R_n", "F", 40)
-    track_shape.field("ϒ", "F", 40, 5)
-    track_shape.field("φ", "F", 40, 5)
-    track_shape.field("λ", "F", 40, 5)
-    track_shape.field("f", "F", 40, 5)
-
-     
-    #Задаем начальное время
+    orb = Orbital("N", line1=tle_1, line2=tle_2)
+    
+    pos_gt = (59.95, 30.316667, 12)
     dt_start = datetime(2024, 2, 21, 3, 0, 0)
-    #Задаем шаг по времени для прогноза
-    delta = timedelta(
-        days=0,
-        seconds=5,
-        microseconds=0,
-        milliseconds=0,
-        minutes=0,
-        hours=0,
-        weeks=0
-    )
-
-    #Задаем количество суток для прогноза
-    dt_end = dt_start + timedelta(
-        days=16,
-#        seconds=5689,
-        seconds=0,
-        microseconds=0,
-        milliseconds=0,
-        minutes=0,
-        hours=0,
-        weeks=0
-    )
-
-    while  a <= 92:
-#        track_shape, acc, abb = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape,pos_gt, a)
-#        ass1.append(acc)
-#        Fd_m.append(abb)
-#        a += 1
-        track_shape, i_m, dt_m, lon_s_m, lat_s_m, R_s_m, R_e_m, R_0_m, y_grad_m, ay_grad_m, a_m, Fd_m_1, Wp_m_1,  = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape,pos_gt_1, a)
- #   track_shape, Wp_m_2, Fd_m_2 = create_orbital_track_shapefile_for_day(tle_1, tle_2, dt_start, dt_end, delta, track_shape,pos_gt_2, a)
-#    print (Fd_m_1)
-#    print (Fd_m_2)
-        sheet1 = book.add_sheet(str(a))   
-        for num in range(len(Fd_m_1)):
-
-            row = sheet1.row(num)
-
-            row.write(0, i_m[num])
-            row.write(1, dt_m[num])
-            row.write(2, lon_s_m[num])
-            row.write(3, lat_s_m[num])
-            row.write(4, R_s_m[num])
-            row.write(5, R_e_m[num])
-            row.write(6, R_0_m[num])
-            row.write(7, y_grad_m[num])
-            row.write(8, ay_grad_m[num])
-            row.write(9, a_m[num])
-            row.write(10, Fd_m_1[num])
-            row.write(11, Wp_m_1[num])
- #       for index, col in enumerate(cols):
- #           value = Fd_m_1[index]
- #           row.write(index, value)
-
-        # Save the result
-
-        a += 0.1
-    book.save(filename + ".xls")
-    plt.title('Доплеровское смещение частоты отраженного сигнала в зависимости от угла скоса и угловой скорости подспутниковой точки')
-    plt.xlabel('скорость подспутниковой точки')
-    plt.ylabel('Fd,Гц')
-    plt.plot( lon_s_m, Fd_m_1, 'ro')
-#    plt.plot(Wp_m_2, Fd_m_2, 'bo')
- #   plt.plot(ass1[4], Fd_m[4], 'yo')
+    delta = timedelta(seconds=5)
+    dt_end = dt_start + timedelta(days=2)
+    
+    base_a_values = np.arange(88.0, 92.1, 1)
+    
+    data = create_orbital_data(orb, dt_start, dt_end, delta, pos_gt, base_a_values)
+    
+    filename = f"space/{s_name}"
+    save_to_shapefile(data, filename)
+    
+    # Фильтрация NaN значений
+    valid_mask = ~np.isnan(data['Fd'])
+    
+    plt.figure(figsize=(12, 6))
+    if np.any(valid_mask):
+        plt.scatter(data['Wp'][valid_mask], data['Fd'][valid_mask], 
+                    c=data['y_grad'][valid_mask], cmap='viridis', s=10)
+        plt.colorbar(label='Угол визирования (°)')
+        plt.xlabel('Скорость подспутниковой точки (км/ч)')
+        plt.ylabel(f'Доплеровское смещение (Гц), λ={WAVELENGTH} м')
+        plt.title('Зависимость доплеровского смещения от параметров орбиты')
+        plt.grid(True)
+    else:
+        print("Нет данных для отображения")
     plt.show()
-
-
-    # Вне цикла нам осталось записать созданный шейп-файл на диск.
-    # Т.к. мы знаем, что координаты положений ИСЗ были получены в WGS84
-    # можно заодно создать файл .prj с нужным описанием
-           
-       
-    try:
-        # Создаем файл .prj с тем же именем, что и выходной .shp
-        prj = open("%s.prj" % filename.replace(".shp", ""), "w")
-        # Создаем переменную с описанием EPSG:4326 (WGS84)
-        wgs84_wkt = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
-        # Записываем её в файл .prj
-        prj.write(wgs84_wkt)
-        # И закрываем его
-        prj.close()
-        # Функцией save также сохраняем и сам шейп.
-        track_shape.save(filename + ".shp")
-    except:
-        # Вдруг нет прав на запись или вроде того...
-        print("Unable to save shapefile")
-        return
 
 if __name__ == "__main__":
     _test()

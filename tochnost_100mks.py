@@ -22,7 +22,6 @@ from calc_cord import \
 from calc_F_L import calc_f_doplera  # Расчет доплеровских параметров
 from calc_F_L import calc_lamda
 from read_TBF import read_tle_base_file  # Чтение TLE данных
-from read_TBF import read_tle_base_internet
 
 # ----------------------------
 # Глобальные константы

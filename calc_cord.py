@@ -1,108 +1,113 @@
 import math
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 import numpy as np
-import pyorbital
 from pyorbital.orbital import XKMPER, F, astronomy
 
-#from sgp4.earth_gravity import wgs84
+# Константы WGS84
+EARTH_EQUATORIAL_RADIUS = 6378.137  # км
+EARTH_FLATTENING = 1/298.257223563
+EARTH_ECCENTRICITY_SQ = 2*EARTH_FLATTENING - EARTH_FLATTENING**2
+MFACTOR = 7.292115e-5  # Угловая скорость вращения Земли (рад/с)
 
-#pi =math.pi
-
-## Ellipsoid Parameters as tuples (semi major axis, inverse flattening)
-grs80 = (6378137, 298.257222100882711)
-#wgs84 = (6378137., 1./298.257223563)
-wgs84 = (6378137, 298.257223563)
-
-
-A = 6378.137  # WGS84 Equatorial radius (km)
-B = 6356.752314245 # km, WGS84
-MFACTOR = 7.292115E-5
-
-def get_xyzv_from_latlon(time, lon, lat, alt):
-    """Calculate observer ECI position.
-        http://celestrak.com/columns/v02n03/
+def get_xyzv_from_latlon(time, lon, lat, alt_km):
+    """Преобразование географических координат в ECI (Earth-Centered Inertial)
+    
+    Аргументы:
+        time (datetime): Время UTC
+        lon (float): Долгота в градусах
+        lat (float): Широта в градусах
+        alt_km (float): Высота над эллипсоидом в километрах
+        
+    Возвращает:
+        tuple: (x, y, z) в километрах
+        tuple: (vx, vy, vz) в км/с
     """
-    lon = np.deg2rad(lon)
-    lat = np.deg2rad(lat)
-
-    theta = (pyorbital.astronomy.gmst(time) + lon) % (2 * np.pi)
-    c = 1 / np.sqrt(1 + F * (F - 2) * np.sin(lat)**2)
-    sq = c * (1 - F)**2
-
-    achcp = (A * c + alt) * np.cos(lat)
-    x = achcp * np.cos(theta)  # kilometers
-    y = achcp * np.sin(theta)
-    z = (A * sq + alt) * np.sin(lat)
-
-    vx = -MFACTOR * y  # kilometers/second
+    # Преобразование в радианы
+    lon_rad = np.deg2rad(lon)
+    lat_rad = np.deg2rad(lat)
+    
+    # Звездное время
+    theta = (astronomy.gmst(time) + lon_rad) % (2 * np.pi)
+    
+    # Параметры эллипсоида
+    N = EARTH_EQUATORIAL_RADIUS / np.sqrt(1 - EARTH_ECCENTRICITY_SQ*np.sin(lat_rad)**2)
+    
+    # Расчет координат
+    x = (N + alt_km) * np.cos(lat_rad) * np.cos(theta)
+    y = (N + alt_km) * np.cos(lat_rad) * np.sin(theta)
+    z = (N*(1 - EARTH_ECCENTRICITY_SQ) + alt_km) * np.sin(lat_rad)
+    
+    # Расчет скорости вращения
+    vx = -MFACTOR * y
     vy = MFACTOR * x
-    vz = 0
-
+    vz = 0.0
+    
     return (x, y, z), (vx, vy, vz)
 
-def get_lonlatalt(pos, utc_time):
-    """Calculate sublon, sublat and altitude of satellite, considering the earth an ellipsoid.
-    http://celestrak.com/columns/v02n03/
+def get_lonlatalt(pos_km, utc_time):
+    """Преобразование ECI координат в географические
+    
+    Аргументы:
+        pos_km (np.ndarray): Вектор позиции [x, y, z] в километрах
+        utc_time (datetime): Время UTC
+        
+    Возвращает:
+        tuple: (Долгота, Широта, Высота) в градусах и километрах
     """
-    (pos_x, pos_y, pos_z) = pos / XKMPER
-    lon = ((np.arctan2(pos_y * XKMPER, pos_x * XKMPER) - astronomy.gmst(utc_time)) % (2 * np.pi))
-    lon = np.where(lon > np.pi, lon - np.pi * 2, lon)
-    lon = np.where(lon <= -np.pi, lon + np.pi * 2, lon)
-
-    r = np.sqrt(pos_x ** 2 + pos_y ** 2)
-    lat = np.arctan2(pos_z, r)
-    e2 = F * (2 - F)
-    while True:
-        lat2 = lat
-        c = 1 / (np.sqrt(1 - e2 * (np.sin(lat2) ** 2)))
-        lat = np.arctan2(pos_z + c * e2 * np.sin(lat2), r)
-        if np.all(abs(lat - lat2) < 1e-10):
+    # Конвертация в метры
+    pos_m = pos_km * 1000  
+    x, y, z = pos_m
+    
+    # Расчет долготы
+    lon_rad = (np.arctan2(y, x) - astronomy.gmst(utc_time)) % (2 * np.pi)
+    if lon_rad > np.pi:
+        lon_rad -= 2*np.pi
+    
+    # Итерационный расчет широты
+    p = np.sqrt(x**2 + y**2)
+    lat_rad = np.arctan(z / (p * (1 - EARTH_ECCENTRICITY_SQ)))
+    
+    for _ in range(10):
+        N = EARTH_EQUATORIAL_RADIUS*1000 / np.sqrt(1 - EARTH_ECCENTRICITY_SQ*np.sin(lat_rad)**2)
+        h = p / np.cos(lat_rad) - N
+        lat_new = np.arctan(z / (p * (1 - EARTH_ECCENTRICITY_SQ*(N/(N + h)))))
+        if np.abs(lat_new - lat_rad) < 1e-15:
             break
-    alt = r / np.cos(lat) - c
-    alt *= A
-    return np.rad2deg(lon), np.rad2deg(lat), alt
-
+        lat_rad = lat_new
+    
+    # Расчет высоты
+    N = EARTH_EQUATORIAL_RADIUS*1000 / np.sqrt(1 - EARTH_ECCENTRICITY_SQ*np.sin(lat_rad)**2)
+    h = p / np.cos(lat_rad) - N
+    
+    return (
+        np.rad2deg(lon_rad),
+        np.rad2deg(lat_rad),
+        h / 1000  # Конвертация в километры
+    )
 
 def _test():
-    lat = 55.75583
-    lon = 37.6173
-    h = 155
-    X_msk = 2849.897965
-    Y_msk = 2195.949753
-    Z_msk = 5249.076832
-
-    delta = timedelta(days=0, seconds=0.5, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)
-    dt_start = datetime.utcnow()
-    dt_end = dt_start + timedelta(
-        days=1,
-        seconds=0,
-        microseconds=0,
-        milliseconds=0,
-        minutes=0,
-        hours=0,
-        weeks=0
-    )
-    dt = dt_start
- #   X_isk, Y_isk, Z_isk = geodetic_to_ISK(lat, lon, h, wgs84, dt_start)
-  #  print(f"X = {X_isk}, Y = {Y_isk}, Z = {Z_isk} ")
-
-    while dt<dt_end:
-#        if calc_gmst(dt) < 0.0001:
-#            print(f"1 -> {calc_gmst(dt)} на {dt}")
-#        if astronomy.gmst(dt) < 0.0001:
-#            print(f"2 -> {astronomy.gmst(dt)} на {dt}")
-#        if GMST(dt) < 0.0001:
-#            print(f"3 -> {GMST(dt)} на {dt}")      
-#        if gmsts(dt) < 0.0001:
-#            print(f"4 -> {gmsts(dt)} на {dt}")
-
-      
-#        print (p)
-#        print (p_0)
-        dt += delta
-
-
+    """Тестирование преобразований координат"""
+    # Тестовые параметры (Москва)
+    test_lon = 37.6173    
+    test_lat = 55.75583
+    test_alt = 0.155  # 155 метров
+    
+    # Генерация тестового времени
+    utc_time = datetime(2024, 2, 21, 12, 0, 0)
+    
+    # Прямое преобразование
+    eci_pos, eci_vel = get_xyzv_from_latlon(utc_time, test_lon, test_lat, test_alt)
+    
+    # Обратное преобразование
+    reconstructed_lon, reconstructed_lat, reconstructed_alt = get_lonlatalt(
+        np.array(eci_pos), utc_time)
+    
+    # Проверка точности
+    assert np.isclose(test_lon, reconstructed_lon, atol=1e-8), f"Ошибка долготы: {test_lon} vs {reconstructed_lon}"
+    assert np.isclose(test_lat, reconstructed_lat, atol=1e-8), f"Ошибка широты: {test_lat} vs {reconstructed_lat}"
+    assert np.isclose(test_alt, reconstructed_alt, atol=1e-6), f"Ошибка высоты: {test_alt} vs {reconstructed_alt}"
+    print("Все тесты пройдены успешно!")
 
 if __name__ == "__main__":
     _test()

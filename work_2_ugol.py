@@ -1,11 +1,13 @@
 import math
 from datetime import datetime, timedelta
-from typing import List, Tuple, Dict, Optional
+from typing import Dict, List, Optional, Tuple
+
 import shapefile
 from pyorbital.orbital import Orbital
+
 from calc_cord import get_xyzv_from_latlon
 from calc_F_L import calc_f_doplera, calc_lamda
-from read_TBF import read_tle_base_file, read_tle_base_internet
+from read_TBF import read_tle_base_file
 
 # Константы
 EARTH_RADIUS = 6378.140  # км
