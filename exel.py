@@ -13,9 +13,7 @@ from pyorbital.orbital import Orbital  # Расчет орбитальной м�
 from calc_cord import get_xyzv_from_latlon  # Конвертация координат
 from calc_F_L import (calc_f_doplera,  # Расчет доплеровских параметров
                       calc_lamda)
-from read_TBF import (read_tle_base_file,  # Чтение TLE данных
-                      read_tle_base_internet)
-
+from read_TBF import (read_tle_base_file)  # Чтение TLE данных
 # ----------------------------
 # Глобальные константы
 # ----------------------------
